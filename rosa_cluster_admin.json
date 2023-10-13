@@ -1,0 +1,4 @@
+{
+  "admin_username": "${rosa_username}",
+  "admin_password": "${rosa_password}"
+}
