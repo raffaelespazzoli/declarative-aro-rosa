@@ -1,0 +1,48 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata: 
+  name: xrosas.crossplane.redhat-cop.com
+spec:
+  group: crossplane.redhat-cop.com
+  defaultCompositeDeletePolicy: Foreground
+  defaultCompositionUpdatePolicy: Automatic
+  names:
+    kind: xRosa
+    plural: xrosas
+  claimNames:
+    kind: Rosa
+    plural: rosas    
+  versions:
+  - name: v1alpha1
+    served: true
+    referenceable: true  
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              region:
+                description: "AWS region"
+                type: string
+              adminSecret:
+                type: object
+                description: "a reference to a secret containing json-formatted file with the admin secret keys: username, password"
+                properties:
+                  secretName:
+                    type: string
+                  key:
+                    type: string 
+                required:
+                - secretName
+                - key                                                    
+            required: 
+              - region
+          status:
+            description: A Status represents the observed state
+            properties:
+              subnets:
+                description: Freeform field containing status information for the subnets
+                type: object
+                x-kubernetes-preserve-unknown-fields: true                              

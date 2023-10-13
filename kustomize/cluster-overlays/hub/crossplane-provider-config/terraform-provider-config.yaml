@@ -1,0 +1,84 @@
+apiVersion: tf.upbound.io/v1beta1
+kind: ProviderConfig
+metadata:
+  name: default
+spec:
+  # Note that unlike most provider configs this one supports an array of
+  # credentials. This is because each Terraform workspace uses a single
+  # Crossplane provider config, but could use multiple Terraform providers each
+  # with their own credentials.
+  credentials:
+    - filename: azure-credentials.json
+      source: Secret
+      secretRef:
+        namespace: crossplane-system
+        name: azure-secret
+        key: creds
+    - filename: aws-credentials
+      source: Secret
+      secretRef:
+        namespace: crossplane-system
+        name: aws-secret
+        key: creds
+    - filename: ocm-token
+      source: Secret
+      secretRef:
+        namespace: crossplane-system
+        name:  ocm-token
+        key: token        
+  configuration: |
+    terraform {
+      backend "kubernetes" {
+        secret_suffix    = "state"
+        in_cluster_config = true
+        namespace = "crossplane-system"
+      } 
+      required_version = ">= 1.0"
+      required_providers {
+        azurerm = {
+          source  = "hashicorp/azurerm"
+          version = ">=3.3.0"
+        }
+        azapi = {
+          source  = "Azure/azapi"
+          version = ">=1.0.0"
+        }
+        aws = {
+          source  = "hashicorp/aws"
+          version = ">= 4.20.0"
+        }
+        rhcs = {
+          version = ">= 1.1.0"
+          source  = "terraform-redhat/rhcs"
+        }        
+      }       
+    }
+
+    provider "rhcs" {
+      token = file("ocm-token")
+      url   = "https://api.openshift.com"
+    }
+
+    provider "aws" {
+      region = "us-east-1"
+      shared_credentials_files = ["aws-credentials"]
+    }    
+
+    provider "azurerm" {
+      features {}
+      client_id = jsondecode(file("azure-credentials.json")).clientId
+      client_secret = jsondecode(file("azure-credentials.json")).clientSecret
+      subscription_id = jsondecode(file("azure-credentials.json")).subscriptionId
+      tenant_id = jsondecode(file("azure-credentials.json")).tenantId
+      use_cli = false
+    }
+
+    provider "azapi" {
+      client_id = jsondecode(file("azure-credentials.json")).clientId
+      client_secret = jsondecode(file("azure-credentials.json")).clientSecret
+      subscription_id = jsondecode(file("azure-credentials.json")).subscriptionId
+      tenant_id = jsondecode(file("azure-credentials.json")).tenantId
+      use_cli = false
+    }              
+
+        

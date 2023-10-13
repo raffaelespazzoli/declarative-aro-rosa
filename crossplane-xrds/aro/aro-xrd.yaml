@@ -1,0 +1,90 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata: 
+  name: xaros.crossplane.redhat-cop.com
+spec:
+  group: crossplane.redhat-cop.com
+  defaultCompositeDeletePolicy: Foreground
+  defaultCompositionUpdatePolicy: Automatic
+  names:
+    kind: xAro
+    plural: xaros
+  claimNames:
+    kind: Aro
+    plural: aros    
+  versions:
+  - name: v1alpha1
+    served: true
+    referenceable: true  
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              location:
+                description: "Azure region"
+                type: string
+              subnet:
+                description: "the CIDR for the vnet used by ARO"
+                type: string
+                default: 10.0.0.0/20
+              controlPlaneSubnet:
+                description: "the subnet for the master nodes"
+                type: string
+                default: 10.0.0.0/24                
+              workerNodeSubnet:
+                description: "the subnet for the worked nodes"        
+                type: string
+                default: 10.0.1.0/24
+              firewallSubnet:
+                description: "the subnet for the firewall TODO: better understand what this is"
+                type: string
+                default: 10.0.2.0/24
+              apiServerVisibility:
+                description: "api server visibility, can be Private or Public"
+                type: string
+                default: Private
+                enum:
+                - Private
+                - Public
+              ingressVisibility:
+                description: "ingress visibility can be Private or Public"
+                type: string
+                default: Private
+                enum:
+                - Private
+                - Public
+              servicePrincipalSecret:
+                type: object
+                description: "a reference to a secret containing a terraform-consumable configuration file that contains two values: spClientId and spClientSecret. These are the service principal credentials used to spin up ARO"
+                properties:
+                  secretName:
+                    type: string
+                  key:
+                    type: string 
+                required:
+                - secretName
+                - key
+              pullSecret:
+                description: pullsecret for the new cluster
+                type: string                         
+            required: 
+              - location                    
+          status:
+            description: A Status represents the observed state
+            properties:
+              resourceGroup:
+                description: Freeform field containing status information for the resource group
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+              subnets:
+                description: Freeform field containing status information for the subnets
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+              vnet:
+                description: Freeform field containing status information for the vnet
+                type: object
+                x-kubernetes-preserve-unknown-fields: true                                
+            type: object                  

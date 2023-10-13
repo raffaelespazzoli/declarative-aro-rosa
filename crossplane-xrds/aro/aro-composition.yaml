@@ -1,0 +1,238 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: aro
+spec:
+  compositeTypeRef:
+    apiVersion: crossplane.redhat-cop.com/v1alpha1
+    kind: xAro
+  patchSets:
+  - name: location
+    patches:
+    - type: FromCompositeFieldPath
+      fromFieldPath: "spec.location"
+      toFieldPath: "spec.forProvider.location"      
+  resources:
+  - name: resource-group
+    base: 
+      apiVersion: azure.upbound.io/v1beta1
+      kind: ResourceGroup
+      metadata:
+        name: resource-group
+      spec:
+        forProvider:
+          location: replace
+    patches:      
+      - type: PatchSet
+        patchSetName: location
+      - type: ToCompositeFieldPath
+        fromFieldPath: metadata.annotations['crossplane.io/external-name']
+        toFieldPath: "status.resourceGroup.name"
+        policy:
+          fromFieldPath: Optional            
+  - name: vnet
+    base:
+      apiVersion: network.azure.upbound.io/v1beta1
+      kind: VirtualNetwork
+      metadata:
+        name: aro-vnet  
+      spec:
+        forProvider:
+          addressSpace:
+            - replace
+          location: replace
+          resourceGroupNameSelector:
+            matchControllerRef: true
+    patches:
+      - type: FromCompositeFieldPath
+        fromFieldPath: "spec.subnet"
+        toFieldPath: "spec.forProvider.addressSpace[0]"
+      - type: PatchSet
+        patchSetName: location
+      - type: ToCompositeFieldPath
+        fromFieldPath: status.atProvider.id
+        toFieldPath: "status.vnet.id"
+        policy:
+          fromFieldPath: Optional        
+    readinessChecks:	
+      - matchCondition:	
+          status: 'True'	
+          type: Ready	
+        type: MatchCondition
+  - name: role-assignment
+    base: 
+      apiVersion: authorization.azure.upbound.io/v1beta1
+      kind: RoleAssignment
+      metadata:
+        name: contributor-role-assignment
+      spec:
+        forProvider:
+          principalId: "ebeeb6e8-af58-4204-9e58-efca7922a3cc"
+          roleDefinitionName: "Network Contributor"
+          scope: ""
+    patches:
+    - type: FromCompositeFieldPath
+      fromFieldPath: "status.vnet.id"
+      toFieldPath: "spec.forProvider.scope"
+      policy:
+        fromFieldPath: Required
+    readinessChecks:	
+      - matchCondition:	
+          status: 'True'	
+          type: Ready	
+        type: MatchCondition                                                   
+  - name: control-plane-subnet
+    base:
+      apiVersion: network.azure.upbound.io/v1beta1
+      kind: Subnet
+      metadata:
+        name: control-plane-subnet  
+        labels:
+          control-plane-subnet: ""
+      spec:
+        forProvider:
+          addressPrefixes:
+            - replace
+          resourceGroupNameSelector:
+            matchControllerRef: true
+          virtualNetworkNameSelector:
+            matchControllerRef: true
+          #privateLinkServiceNetworkPoliciesEnabled: false  
+    patches:
+      - type: FromCompositeFieldPath
+        fromFieldPath: "spec.controlPlaneSubnet"
+        toFieldPath: "spec.forProvider.addressPrefixes[0]"
+      - type: ToCompositeFieldPath
+        fromFieldPath: status.atProvider.id
+        toFieldPath: "status.subnets.controlPlaneSubnetId"
+        policy:
+          fromFieldPath: Optional
+    readinessChecks:	
+      - matchCondition:	
+          status: 'True'	
+          type: Ready	
+        type: MatchCondition                           
+  - name: worker-node-subnet
+    base:
+      apiVersion: network.azure.upbound.io/v1beta1
+      kind: Subnet
+      metadata:
+        name: worker-node-subnet 
+        labels:
+          worker-node-subnet: ""   
+      spec:
+        forProvider:
+          addressPrefixes:
+            - replace
+          resourceGroupNameSelector:
+            matchControllerRef: true
+          virtualNetworkNameSelector:
+            matchControllerRef: true
+    patches:
+      - type: FromCompositeFieldPath
+        fromFieldPath: "spec.workerNodeSubnet"
+        toFieldPath: "spec.forProvider.addressPrefixes[0]"
+      - type: ToCompositeFieldPath
+        fromFieldPath: status.atProvider.id
+        toFieldPath: "status.subnets.workerNodeSubnetId"
+        policy:
+          fromFieldPath: Optional
+    readinessChecks:	
+      - matchCondition:	
+          status: 'True'	
+          type: Ready	
+        type: MatchCondition
+  - name: aro
+    base:
+      apiVersion: tf.upbound.io/v1beta1
+      kind: Workspace
+      metadata:
+        name: aro
+      spec:
+        publishConnectionDetailsTo:
+          name: aro-tf
+          configRef:
+            name: vault 
+        forProvider:
+          # Use any module source supported by terraform init -from-module.
+          source: Remote
+          module: git::https://github.com/raffaelespazzoli/declatative-aro-rosa//terraform/aro
+          # Variables can be specified inline as a list of key-value pairs or as an json object, or loaded from a ConfigMap or Secret.
+          vars:
+          - key: name
+            value: ""
+          - key: location
+            value: ""
+          - key: resource_group_name
+            value: ""         
+          - key: master_subnet_id
+            value: ""
+          - key: worker_subnet_id
+            value: ""
+          - key: api_server_visibility
+            value: ""
+          - key: ingress_visibility
+            value: ""            
+          varFiles:  
+          - format: JSON
+            secretKeyRef:
+              key: ""
+              name: ""
+              namespace: ""
+            source: SecretKey
+          - format: JSON
+            secretKeyRef:
+              key: pullsecret
+              name: pullsecret
+              namespace: crossplane-system
+            source: SecretKey                                          
+    patches:          
+
+    - type: FromCompositeFieldPath
+      fromFieldPath: "spec.servicePrincipalSecret.secretName"
+      toFieldPath: "spec.forProvider.varFiles[0].secretKeyRef.name"
+
+    - type: FromCompositeFieldPath
+      fromFieldPath: "spec.servicePrincipalSecret.key"
+      toFieldPath: "spec.forProvider.varFiles[0].secretKeyRef.key"
+
+    - type: FromCompositeFieldPath
+      fromFieldPath: "metadata.labels['crossplane.io/claim-namespace']"
+      toFieldPath: "spec.forProvider.varFiles[0].secretKeyRef.namespace"     
+
+    - type: FromCompositeFieldPath
+      fromFieldPath: "metadata.name"
+      toFieldPath: "spec.forProvider.vars[0].value"    
+    - type: FromCompositeFieldPath
+      fromFieldPath: "spec.location"
+      toFieldPath: "spec.forProvider.vars[1].value"
+
+    - type: FromCompositeFieldPath
+      fromFieldPath: "status.resourceGroup.name"
+      toFieldPath: "spec.forProvider.vars[2].value"
+      policy:
+        fromFieldPath: Required
+    - type: FromCompositeFieldPath
+      fromFieldPath: "status.subnets.controlPlaneSubnetId"
+      toFieldPath: "spec.forProvider.vars[3].value"
+      policy:
+        fromFieldPath: Required
+    - type: FromCompositeFieldPath
+      fromFieldPath: "status.subnets.workerNodeSubnetId"
+      toFieldPath: "spec.forProvider.vars[4].value"
+      policy:
+        fromFieldPath: Required
+
+    - type: FromCompositeFieldPath
+      fromFieldPath: "spec.apiServerVisibility"
+      toFieldPath: "spec.forProvider.vars[5].value"
+    - type: FromCompositeFieldPath
+      fromFieldPath: "spec.ingressVisibility"
+      toFieldPath: "spec.forProvider.vars[6].value"           
+           
+    readinessChecks:	
+      - matchCondition:	
+          status: 'True'	
+          type: Ready	
+        type: MatchCondition      
+                                        

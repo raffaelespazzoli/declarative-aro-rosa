@@ -1,0 +1,9 @@
+apiVersion: crossplane.redhat-cop.com/v1alpha1
+kind: Rosa
+metadata: 
+  name: rosa-decl
+spec:
+  region: us-east-2
+  adminSecret:
+    secretName: cluster-admin
+    key: admin-json   
