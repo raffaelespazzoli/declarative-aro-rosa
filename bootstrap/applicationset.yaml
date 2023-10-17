@@ -8,7 +8,7 @@ spec:
     - git:
         directories:
           - path: kustomize/cluster-overlays/hub/*
-        repoURL: https://github.com/raffaelespazzoli/openshift-iac-multicluster.git
+        repoURL: https://github.com/raffaelespazzoli/declarative-aro-rosa.git
         revision: main
   goTemplate: true
   # strategy:
